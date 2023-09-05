@@ -1,5 +1,6 @@
 import json
 import random
+import re
 import time
 from json import JSONDecodeError
 from typing import Dict, List, Optional, Tuple
@@ -8,8 +9,11 @@ import openai
 from openai.error import RateLimitError, ServiceUnavailableError
 from thefuzz import fuzz
 
-from distractors_generator.constants import (DISTRACTORS_PROMPT_TEMPLATE,
-                                             DUPLICATES_THRESHOLD, MODEL_NAME)
+from distractors_generator.constants import (
+    DISTRACTORS_PROMPT_TEMPLATE,
+    DUPLICATES_THRESHOLD,
+    MODEL_NAME,
+)
 from distractors_generator.tokens_counter import token_counter
 
 
@@ -28,7 +32,9 @@ class DistractorGenerator:
         """
         return token_counter(self._system_prompt, self._model)
 
-    def _is_duplicate(self, a: str, b: str, threshold: int = DUPLICATES_THRESHOLD) -> bool:
+    def _is_duplicate(
+        self, a: str, b: str, threshold: int = DUPLICATES_THRESHOLD
+    ) -> bool:
         """
         Check if two strings are duplicates.
 
@@ -95,11 +101,13 @@ class DistractorGenerator:
                 )["choices"][0]["message"]["content"]
                 return self._parse_output_json(response)
 
-            except JSONDecodeError:
+            except JSONDecodeError as e:
+                print(e)
                 continue
 
             except (RateLimitError, ServiceUnavailableError) as e:
                 wait_time = e.headers.get("Retry-After", 20)
+                print(f"Rate limit exceeded, waiting for {wait_time} seconds")
                 time.sleep(wait_time)
                 continue
 
@@ -162,7 +170,9 @@ class DistractorGenerator:
 
         for _ in range(num_trials):
             # Infer model and get response
-            distractors_dict = self._safe_generate(message_history, temperature=temperature)
+            distractors_dict = self._safe_generate(
+                message_history, temperature=temperature
+            )
 
             # Check if we have response
             if distractors_dict is None:
@@ -173,7 +183,9 @@ class DistractorGenerator:
 
             # Check if we have new unique distractors
             for new_dis in distractors_new:
-                is_duplicate = any([self._is_duplicate(new_dis, dis) for dis in distractors])
+                is_duplicate = any(
+                    [self._is_duplicate(new_dis, dis) for dis in distractors]
+                )
                 if not is_duplicate:
                     distractors.append(new_dis)
 
@@ -238,6 +250,9 @@ class DistractorGenerator:
         # Remove translation from distractors list (if it exists)
         distractors = [dis for dis in distractors if dis != translation]
 
+        # Remove parentheses
+        distractors = [re.sub(r"\s*\(.*\)", "", string) for string in distractors]
+
         # Remove duplicates from distractors list
         distractors, duplicates = self._drop_duplicates(distractors)
 
@@ -253,5 +268,9 @@ class DistractorGenerator:
         # If we still don't have enough distractors, just sample from duplicates
         if len(distractors) < count:
             distractors += random.sample(duplicates, count - len(distractors))
+
+        # If we have too many distractors, truncate
+        if len(distractors) > count:
+            distractors = distractors[:count]
 
         return distractors

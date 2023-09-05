@@ -62,7 +62,6 @@ def generate_disctactors(
 
     # Load the CSV file with word translations
     df = pd.read_csv(input_path)
-
     # Keeping track of time taken to generate distractors
     generation_times = []
 
@@ -76,7 +75,6 @@ def generate_disctactors(
         target_language = df.iloc[index]["target_language"]
         word = df.iloc[index]["word"]
         translation = df.iloc[index]["translation"]
-
         start_time = time.time()  # Record the start time
         response = generator.generate(
             word=word,
@@ -89,7 +87,11 @@ def generate_disctactors(
         generation_times.append(time.time() - start_time)
 
         # Save the output to the JSONL file
-        output_item = {"word": word, "translation": translation, "distractors": response}
+        output_item = {
+            "word": word,
+            "translation": translation,
+            "distractors": response,
+        }
 
         # Append the current output to the existing JSONL file
         outputs.append(output_item)
@@ -101,7 +103,9 @@ def generate_disctactors(
     )
 
     # Dump to json file
-    output_path.write_text(json.dumps(outputs), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(outputs, ensure_ascii=False, indent=4), encoding="utf-8"
+    )
 
     logger.info(f"Saved distractors to {output_path}")
 
